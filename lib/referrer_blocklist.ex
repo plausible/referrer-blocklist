@@ -10,12 +10,12 @@ defmodule ReferrerBlocklist do
   end
 
   def init(opts) do
-    timer = Process.send_after(self(), :update_list, @update_interval_milliseconds)
-    filepath = Keyword.get(opts, :filepath, default_filepath())
+    filepath = Keyword.get(opts, :filepath, blocklist_filepath())
     resource_url = Keyword.get(opts, :resource_url, @resource_url)
-    blocklist = get_blocklist(filepath, resource_url, init: true)
 
-    {:ok, %{timer: timer, filepath: filepath, blocklist: MapSet.new(blocklist)}}
+    timer = Process.send_after(self(), {:update_list, resource_url}, 10)
+
+    {:ok, %{timer: timer, blocklist: read_blocklist_from_file(filepath)}}
   end
 
   def is_spammer?(domain, pid \\ __MODULE__) do
@@ -27,8 +27,8 @@ defmodule ReferrerBlocklist do
     {:reply, is_spammer, state}
   end
 
-  def handle_info(:update_list, state) do
-    updated_blocklist = get_blocklist(state.filepath, @resource_url)
+  def handle_info({:update_list, resource_url}, state) do
+    updated_blocklist = attempt_blocklist_update(resource_url, state.blocklist)
 
     Process.cancel_timer(state[:timer])
     new_timer = Process.send_after(self(), :update_list, @update_interval_milliseconds)
@@ -36,18 +36,24 @@ defmodule ReferrerBlocklist do
     {:noreply, %{state | blocklist: updated_blocklist, timer: new_timer}}
   end
 
-  defp get_blocklist(filepath, resource_url, opts \\ []) do
+  defp read_blocklist_from_file(filepath) do
+    File.read!(filepath)
+    |> String.split("\n")
+    |> MapSet.new()
+  end
+
+  defp attempt_blocklist_update(resource_url, current_blocklist) do
     case HTTPoison.get(resource_url) do
       {:ok, response} when response.status_code == 200 ->
-        if opts[:init], do: File.write!(filepath, response.body)
         String.split(response.body, "\n")
+        |> MapSet.new()
 
-      {:error, _reason} ->
-        File.read!(filepath) |> String.split("\n")
+      {:error, _} ->
+        current_blocklist
     end
   end
 
-  defp default_filepath() do
+  defp blocklist_filepath() do
     Application.app_dir(:referrer_blocklist, "/priv/spammers.txt")
   end
 end

@@ -10,17 +10,17 @@ defmodule ReferrerBlocklistTest do
     {:ok, %{filepath: filepath}}
   end
 
-  test "updates list on init", %{filepath: filepath} do
+  test "reads blocklist from file on init, when update not completed", %{filepath: filepath} do
     ReferrerBlocklist.start_link(filepath: filepath)
 
-    assert !ReferrerBlocklist.is_spammer?("pre-existing.blocklist")
-    assert ReferrerBlocklist.is_spammer?("0-0.fr")
+    assert ReferrerBlocklist.is_spammer?("pre-existing.blocklist")
   end
 
-  test "overwrites default list file on init", %{filepath: filepath} do
+  test "init updates list once the request is completed", %{filepath: filepath} do
     ReferrerBlocklist.start_link(filepath: filepath)
+    Process.sleep(1000)
 
-    assert String.length(File.read!(filepath)) > 1000
+    assert ReferrerBlocklist.is_spammer?("0-0.fr")
   end
 
   test "uses default list from file when request fails on init", %{filepath: filepath} do
