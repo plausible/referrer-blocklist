@@ -31,7 +31,9 @@ defmodule ReferrerBlocklist do
     updated_blocklist = attempt_blocklist_update(resource_url, state.blocklist)
 
     Process.cancel_timer(state[:timer])
-    new_timer = Process.send_after(self(), :update_list, @update_interval_milliseconds)
+
+    new_timer =
+      Process.send_after(self(), {:update_list, resource_url}, @update_interval_milliseconds)
 
     {:noreply, %{state | blocklist: updated_blocklist, timer: new_timer}}
   end
